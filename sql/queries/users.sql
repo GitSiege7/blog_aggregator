@@ -12,3 +12,9 @@ RETURNING *;
 select * from users
 where name = $1
 limit 1;
+
+-- name: Resets :exec
+delete from users;
+
+-- name: GetUsers :many
+select name from users;

@@ -1,8 +1,11 @@
 package main
 
 import (
+	"database/sql"
 	"fmt"
 	"os"
+
+	database "github.com/GitSiege7/blog_aggregator/internal/database"
 
 	_ "github.com/lib/pq"
 
@@ -16,7 +19,15 @@ func main() {
 		return
 	}
 
+	db, err := sql.Open("postgres", c.Db_url)
+	if err != nil {
+		fmt.Println(fmt.Errorf("failed to open db: %v", err))
+	}
+
+	dbQueries := database.New(db)
+
 	s := state{
+		dbQueries,
 		&c,
 	}
 
@@ -25,10 +36,13 @@ func main() {
 	}
 
 	cmds.register("login", handlerLogin)
+	cmds.register("register", handlerRegister)
+	cmds.register("reset", handlerReset)
+	cmds.register("users", handlerUsers)
 
 	args := os.Args[1:]
 
-	if len(args) < 2 {
+	if len(args) < 1 {
 		fmt.Printf("error: insufficient args (%v)\n", len(args))
 		os.Exit(1)
 	}
