@@ -96,6 +96,58 @@ func handlerUsers(s *state, cmd command) error {
 	return nil
 }
 
+func handlerAgg(s *state, cmd command) error {
+	data, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
+	if err != nil {
+		return fmt.Errorf("failed fetch: %v", err)
+	}
+
+	fmt.Println(*data)
+	return nil
+}
+
+func handlerAddFeed(s *state, cmd command) error {
+	if len(cmd.args) < 2 {
+		fmt.Println("insufficient arguments")
+		os.Exit(1)
+	}
+
+	user, err := s.db.GetUser(context.Background(), s.c.Current_user_name)
+	if err != nil {
+		return fmt.Errorf("failed getuser: %v", err)
+	}
+
+	uuid := uuid.New()
+	time := time.Now()
+
+	err = s.db.CreateFeed(context.Background(), database.CreateFeedParams{uuid, time, time, cmd.args[0], cmd.args[1], user.ID})
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("User created:\nUUID: %v\nCreated: %v\nUpdated: %v\nName: %v\nURL: %v\nUser: %v\n", uuid, time, time, cmd.args[0], cmd.args[1], user.Name)
+	return nil
+}
+
+func handlerFeeds(s *state, cmd command) error {
+	feeds, err := s.db.GetFeeds(context.Background())
+	if err != nil {
+		return fmt.Errorf("failed getfeeds: %v", err)
+	}
+
+	for _, feed := range feeds {
+		username, err := s.db.GetUserByID(context.Background(), feed.UserID)
+		if err != nil {
+			return fmt.Errorf("failed getuserbyid: %v", err)
+		}
+
+		fmt.Printf("Name: %v\nURL: %v\nUser: %v\n", feed.Name, feed.Url, username)
+		fmt.Printf("\n")
+	}
+
+	return nil
+}
+
 func (c *commands) run(s *state, cmd command) error {
 	err := c.callback[cmd.name](s, cmd)
 	if err != nil {
