@@ -110,21 +110,16 @@ func handlerAgg(s *state, cmd command) error {
 	return nil
 }
 
-func handlerAddFeed(s *state, cmd command) error {
+func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.args) < 2 {
 		fmt.Println("insufficient arguments")
 		os.Exit(1)
 	}
 
-	user, err := s.db.GetUser(context.Background(), s.c.Current_user_name)
-	if err != nil {
-		return fmt.Errorf("failed getuser: %v", err)
-	}
-
 	feed_UUID := uuid.New()
 	time := time.Now()
 
-	err = s.db.CreateFeed(context.Background(), database.CreateFeedParams{
+	err := s.db.CreateFeed(context.Background(), database.CreateFeedParams{
 		ID:        feed_UUID,
 		CreatedAt: time,
 		UpdatedAt: time,
@@ -168,7 +163,7 @@ func handlerFeeds(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollow(s *state, cmd command) error {
+func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.args) < 1 {
 		fmt.Printf("insufficient arguments")
 		os.Exit(1)
@@ -181,10 +176,6 @@ func handlerFollow(s *state, cmd command) error {
 
 	uuid := uuid.New()
 	time := time.Now()
-	user, err := s.db.GetUser(context.Background(), s.c.Current_user_name)
-	if err != nil {
-		return fmt.Errorf("failed getuser: %v", err)
-	}
 
 	feed_follow, err := s.db.CreateFeedFollow(context.Background(), database.CreateFeedFollowParams{
 		ID:        uuid,
@@ -204,12 +195,7 @@ func handlerFollow(s *state, cmd command) error {
 	return nil
 }
 
-func handlerFollowing(s *state, cmd command) error {
-	user, err := s.db.GetUser(context.Background(), s.c.Current_user_name)
-	if err != nil {
-		return fmt.Errorf("failed getuser: %v", err)
-	}
-
+func handlerFollowing(s *state, cmd command, user database.User) error {
 	follows, err := s.db.GetFeedFollowsForUser(context.Background(), user.ID)
 	if err != nil {
 		return fmt.Errorf("failed getfollows: %v", err)
@@ -221,6 +207,19 @@ func handlerFollowing(s *state, cmd command) error {
 	}
 
 	return nil
+}
+
+func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) error) func(*state, command) error {
+	return func(s *state, cmd command) error {
+		user, err := s.db.GetUser(context.Background(), s.c.Current_user_name)
+		if err != nil {
+			return fmt.Errorf("failed getuser: %v", err)
+		}
+
+		_ = handler(s, cmd, user)
+
+		return nil
+	}
 }
 
 func (c *commands) run(s *state, cmd command) error {
