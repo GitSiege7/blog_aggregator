@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"time"
@@ -101,13 +102,25 @@ func handlerUsers(s *state, cmd command) error {
 }
 
 func handlerAgg(s *state, cmd command) error {
-	data, err := fetchFeed(context.Background(), "https://www.wagslane.dev/index.xml")
-	if err != nil {
-		return fmt.Errorf("failed fetch: %v", err)
+	if len(cmd.args) < 1 {
+		return fmt.Errorf("insufficient arguments")
 	}
 
-	fmt.Println(*data)
-	return nil
+	time_between_reqs, err := time.ParseDuration(cmd.args[0])
+	if err != nil {
+		return fmt.Errorf("failed parseduration: %v", err)
+	}
+
+	fmt.Printf("Collecting feeds every %v\n", time_between_reqs)
+
+	ticker := time.NewTicker(time_between_reqs)
+
+	for ; ; <-ticker.C {
+		err = scrapeFeeds(s)
+		if err != nil {
+			fmt.Println(err)
+		}
+	}
 }
 
 func handlerAddFeed(s *state, cmd command, user database.User) error {
@@ -243,13 +256,39 @@ func middlewareLoggedIn(handler func(s *state, cmd command, user database.User) 
 	}
 }
 
-func (c *commands) run(s *state, cmd command) error {
-	err := c.callback[cmd.name](s, cmd)
+func scrapeFeeds(s *state) error {
+	feed, err := s.db.GetNextFeedToFetch(context.Background())
 	if err != nil {
-		return fmt.Errorf("failed to run: %v", err)
+		return fmt.Errorf("failed getnextfeedtofetch: %v", err)
+	}
+
+	err = s.db.MarkFeedFetched(context.Background(), database.MarkFeedFetchedParams{
+		LastFetchedAt: sql.NullTime{
+			Time:  time.Now(),
+			Valid: true,
+		},
+		ID: feed.ID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed markfeedfetched: %v", err)
+	}
+
+	fmt.Println("Fetching feed...")
+
+	rss, err := fetchFeed(context.Background(), feed.Url)
+	if err != nil {
+		return fmt.Errorf("failed fetchfeed: %v", err)
+	}
+
+	for _, item := range rss.Channel.Item {
+		fmt.Printf(" - %v\n", item.Title)
 	}
 
 	return nil
+}
+
+func (c *commands) run(s *state, cmd command) error {
+	return c.callback[cmd.name](s, cmd)
 }
 
 func (c *commands) register(name string, f func(*state, command) error) {

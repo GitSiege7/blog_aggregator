@@ -55,7 +55,7 @@ func main() {
 
 	err = cmds.run(&s, command{args[0], args[1:]})
 	if err != nil {
-		fmt.Println(fmt.Errorf("failed to run: %v", err))
+		fmt.Println(err)
 		return
 	}
 }
