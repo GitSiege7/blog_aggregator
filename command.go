@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strconv"
+	"strings"
 	"time"
 
 	config "github.com/GitSiege7/blog_aggregator/internal/config"
@@ -103,7 +105,7 @@ func handlerUsers(s *state, cmd command) error {
 
 func handlerAgg(s *state, cmd command) error {
 	if len(cmd.args) < 1 {
-		return fmt.Errorf("insufficient arguments")
+		return fmt.Errorf("usage: agg {interval} ('30s', '10m')")
 	}
 
 	time_between_reqs, err := time.ParseDuration(cmd.args[0])
@@ -125,7 +127,7 @@ func handlerAgg(s *state, cmd command) error {
 
 func handlerAddFeed(s *state, cmd command, user database.User) error {
 	if len(cmd.args) < 2 {
-		fmt.Println("insufficient arguments")
+		fmt.Println("usage: addfeed {name} {url}")
 		os.Exit(1)
 	}
 
@@ -178,7 +180,7 @@ func handlerFeeds(s *state, cmd command) error {
 
 func handlerFollow(s *state, cmd command, user database.User) error {
 	if len(cmd.args) < 1 {
-		fmt.Printf("insufficient arguments")
+		fmt.Printf("usage: follow {url}")
 		os.Exit(1)
 	}
 
@@ -224,7 +226,7 @@ func handlerFollowing(s *state, cmd command, user database.User) error {
 
 func handlerUnfollow(s *state, cmd command, user database.User) error {
 	if len(cmd.args) < 1 {
-		return fmt.Errorf("insufficient arguments")
+		return fmt.Errorf("usage: unfollow {url}")
 	}
 
 	feed, err := s.db.GetFeedByUrl(context.Background(), cmd.args[0])
@@ -280,8 +282,70 @@ func scrapeFeeds(s *state) error {
 		return fmt.Errorf("failed fetchfeed: %v", err)
 	}
 
+	Decode_escaped(rss)
+
 	for _, item := range rss.Channel.Item {
-		fmt.Printf(" - %v\n", item.Title)
+		now := time.Now()
+		UUID := uuid.New()
+
+		date, err := time.Parse("Mon, 02 Jan 2006 15:04:05 Z0700", item.PubDate)
+		if err != nil {
+			return fmt.Errorf("failed timeparse on %v: %v", item.PubDate, err)
+		}
+
+		err = s.db.CreatePost(context.Background(), database.CreatePostParams{
+			ID:        UUID,
+			CreatedAt: now,
+			UpdatedAt: now,
+			Title: sql.NullString{
+				String: item.Title,
+				Valid:  true,
+			},
+			Url: rss.Channel.Link,
+			Description: sql.NullString{
+				String: item.Description,
+				Valid:  true,
+			},
+			PublishedAt: date,
+			FeedID:      feed.ID,
+		})
+
+		if err != nil {
+			if strings.Contains(err.Error(), "duplicate key value violates unique constraint") {
+				continue
+			}
+
+			fmt.Println(err)
+		}
+	}
+
+	return nil
+}
+
+func handlerBrowse(s *state, cmd command, user database.User) error {
+	var limit int32 = 2
+	if len(cmd.args) != 0 {
+		parsed, err := strconv.ParseInt(cmd.args[0], 10, 32)
+		if err != nil {
+			return fmt.Errorf("failed parseint: %v", err)
+		}
+
+		limit = int32(parsed)
+	}
+
+	posts, err := s.db.GetPostsForUser(context.Background(), database.GetPostsForUserParams{
+		UserID: user.ID,
+		Limit:  limit,
+	})
+	if err != nil {
+		return fmt.Errorf("failed getpostsforuser: %v", err)
+	}
+
+	for _, post := range posts {
+		fmt.Println(post.Title.String)
+		fmt.Println(post.Description.String)
+		fmt.Println(post.PublishedAt)
+		fmt.Println()
 	}
 
 	return nil

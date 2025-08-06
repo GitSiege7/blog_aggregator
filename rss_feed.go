@@ -52,12 +52,12 @@ func fetchFeed(ctx context.Context, feedURL string) (*RSSFeed, error) {
 		return nil, fmt.Errorf("failed unmarshal: %v", err)
 	}
 
-	decode_escaped(&data)
+	Decode_escaped(&data)
 
 	return &data, nil
 }
 
-func decode_escaped(data *RSSFeed) {
+func Decode_escaped(data *RSSFeed) {
 	data.Channel.Title = html.UnescapeString(data.Channel.Title)
 	data.Channel.Description = html.UnescapeString(data.Channel.Description)
 

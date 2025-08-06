@@ -8,7 +8,7 @@ create table posts (
     description text,
     published_at timestamp not null,
     feed_id uuid not null,
-    foreign key (feed_id) references feeds.id,
+    foreign key(feed_id) references feeds(id) on delete cascade,
     unique(url)
 );
 
